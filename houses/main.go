@@ -5,32 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hyperledger/fabric/core/chaincode/lib/cid"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	pb "github.com/hyperledger/fabric/protos/peer"
-	"github.com/thomasks/leju-cc/cryptoutils"
 )
 
 // Chaincode comment
 type Chaincode struct {
 }
 
-//{"Args":["attr", "name"]}'
-func (t *Chaincode) attr(stub shim.ChaincodeStubInterface, args []string) pb.Response {
-	fmt.Println("get attr: ", args[0])
-	value, ok, err := cid.GetAttributeValue(stub, args[0])
-	if err != nil {
-		return shim.Error("get attr error: " + err.Error())
-	}
-
-	if ok == false {
-		value = "not found"
-	}
-	bytes, err := json.Marshal(value)
-	if err != nil {
-		return shim.Error("json marshal error: " + err.Error())
-	}
-	return shim.Success(bytes)
+//CryptoDescriptor comment
+type CryptoDescriptor struct {
+	Level        string   `json:"level"`
+	CryptoFields []string `json:"cryptoFields"`
 }
 
 //{"Args":["query","key"]}'
@@ -56,7 +42,7 @@ func (t *Chaincode) write(stub shim.ChaincodeStubInterface, key, value string) p
 func (t *Chaincode) writeMultiSegData(stub shim.ChaincodeStubInterface, key, value, cryptoDescriptor string) pb.Response {
 	fmt.Printf("write %s,value is %s,SegDescriptor is %s\n", key, value, cryptoDescriptor)
 
-	var cds []cryptoutils.CryptoDescriptor
+	var cds []CryptoDescriptor
 	if err := json.Unmarshal([]byte(cryptoDescriptor), &cds); err != nil {
 		return shim.Error("unmarshal cryptoDescriptor error: " + err.Error())
 	}
@@ -97,33 +83,6 @@ func (t *Chaincode) writeMultiSegData(stub shim.ChaincodeStubInterface, key, val
 }
 
 func parseMultiSegData(stub shim.ChaincodeStubInterface, jsonValue string) (string, error) {
-	//fmt.Printf("@@parseMultiSegData jsonValue is: [%s]\n", jsonValue)
-	//var bytes = []byte(jsonValue)
-	//var readTo = make(map[string]interface{}, 128)
-	//if err := json.Unmarshal(bytes, &readTo); err != nil {
-	//fmt.Printf("@@parseMultiSegData readTo mett error [%s]\n.", err.Error())
-	//return jsonValue, err
-	//}
-	//var headMap, ok = readTo["head"].(map[string]interface{})
-	//if !ok {
-	//fmt.Println("head is not a map!")
-	//}
-
-	//var cdsJSON, ok2 = headMap["cryptoDescriptor"].(string)
-	//if !ok2 {
-	//fmt.Printf("cryptoDescriptor is not a string\n,cryptoDescriptor type is %T\ncryptoDescriptor value is %v\n", headMap["cryptoDescriptor"], headMap["cryptoDescriptor"])
-	//}
-	//var cds []cryptoutils.CryptoDescriptor
-	//if err := json.Unmarshal([]byte(cdsJSON), &cds); err != nil {
-	//fmt.Printf("@@parseMultiSegData CryptoDescriptor mett error [%s]\nraw json string is [%s]\n", err.Error(), cdsJSON)
-	//return jsonValue, err
-	//}
-	//cryptoutils.DecryptoDataByDescriptor(stub, readTo, cds)
-	//ret, err2 := json.Marshal(readTo)
-	//if err2 != nil {
-	//fmt.Printf("@@parseMultiSegData Marshal mett error [%s]\n.", err2.Error())
-	//return jsonValue, err2
-	//}
 	return jsonValue, nil
 }
 
@@ -167,7 +126,6 @@ func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString 
 		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
-		// 获取每个需要解密的数据
 		var decryptBuffer bytes.Buffer
 		decryptBuffer.WriteString("{\"Key\":")
 		decryptBuffer.WriteString("\"")
@@ -179,10 +137,10 @@ func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString 
 		// Record is a JSON object, so we write as-is
 		//fmt.Printf("queryResponse.Value is[%s]\n", queryResponse.Value)
 		decryptString, err := parseMultiSegData(stub, string(queryResponse.Value))
-		if err != nil { // 如果解密失败，则返回加密数据
+		if err != nil {
 			fmt.Printf("parseMultiSegData meet error [%s]\n", err.Error())
 			decryptBuffer.WriteString(string(queryResponse.Value))
-		} else { // 解密成功，则返回解密后数据
+		} else {
 			decryptBuffer.WriteString(decryptString)
 		}
 		decryptBuffer.WriteString("}")
@@ -223,28 +181,22 @@ func (t *Chaincode) delByKey(stub shim.ChaincodeStubInterface, key string) pb.Re
 	return shim.Success(nil)
 }
 
-//Invoke {"write":["key","value"]}
 //Invoke {"writeMultiSegData":["key","value","SegDataDescriptor"]}
 //
 func (t *Chaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	function, args := stub.GetFunctionAndParameters()
 	switch function {
-	case "attr":
-		if len(args) != 1 {
-			return shim.Error("parametes's number is wrong")
-		}
-		return t.attr(stub, args)
-	case "query": //查询
+	case "query":
 		if len(args) != 1 {
 			return shim.Error("parametes's number is wrong")
 		}
 		return t.query(stub, args[0])
-	case "queryByParam": //查询
+	case "queryByParam":
 		if len(args) != 1 {
 			return shim.Error("parametes's number is wrong")
 		}
 		return t.queryByParam(stub, args)
-	case "sync": //写入
+	case "sync":
 		if len(args) != 3 {
 			return shim.Error("parametes's number is wrong")
 		}
